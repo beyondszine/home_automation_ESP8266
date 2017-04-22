@@ -2,25 +2,17 @@
 
 Functions in the file
       void handleRoot() 
-      boolean captivePortal() 
-      void handleWifi() 
       void handleWifiSave() 
-      void handleSaveKeys()
       void handleactivateAPmode()
       void handleNotFound()
       void handleResetCreds()
       void handleESPStats()
-      void handleStatus() 
-      void handleResetAll()
+
 */
 
 
 void handleRoot() 
 {
-  if (captivePortal()) 
-  { // If caprive portal redirect instead of displaying the page.
-    return;
-  }
   server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
   server.sendHeader("Pragma", "no-cache");
   server.sendHeader("Expires", "-1");
@@ -42,22 +34,7 @@ void handleRoot()
   server.client().stop(); // Stop is needed because we sent no content length
 }
 
-/** Redirect to captive portal if we got a request for another domain. Return true in that case so the page handler do not try to handle the request again. */
-boolean captivePortal() 
-{
-  if (!isIp(server.hostHeader()) && server.hostHeader() != (String(myHostname)+".local")) 
-  {
-    if(DEBUG)    
-      Serial.print("Request redirected to captive portal");
-    server.sendHeader("Location", String("http://") + toStringIp(server.client().localIP()), true);
-    server.send ( 302, "text/plain", ""); // Empty content inhibits Content-length header so we have to close the socket ourselves.
-    server.client().stop(); // Stop is needed because we sent no content length
-    return true;
-  }
-  return false;
-}
 
-/** Wifi config page handler */
 void handleWifi() 
 {
   server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
@@ -154,56 +131,9 @@ void handleWifiSave()
   delay(100);
 
   saveCredentials();
-  connect = strlen(ssid) > 0; // Request WLAN connect with new credentials if there is a SSID
-
-  // also i m going to disconnect from softAP
-
-   // DOUBT HERE THATMAY CREATE DEADLOCK
-    
-//  WiFi.softAPdisconnect(true);
-//  WiFi.begin(WIFI_STA);
+  credentialsPresent = true;
 }
 
-
-void handleSaveKeys()
-{
-  // PUSH KEYS IN GLOBAL PARAMS
-  // DO NECESARY CHECKS, IF AT ALL
-  s_key = server.arg("s");
-  d_key = server.arg("d");
-
-  if(DEBUG)
-  {
-    Serial.print("obtained parameters via post call For Keys\t\t");
-    Serial.print(s_key);
-    Serial.print("\t");
-    Serial.println(d_key);
-  }
-  
-  if(s_key=="" || s_key==NULL || d_key=="" || d_key==NULL)
-  {
-  if(DEBUG)    
-    Serial.println("Error while recieving keys");
-  return;
-  }
-  else
-  {
-    s_key.getBytes(skey,s_key.length() + 1);
-    d_key.getBytes(dkey,d_key.length() + 1);
-    showKey('d');
-    showKey('s');  
-    saveKeysEEPROM();
-    
-    String message="{\"Status\":\"Success\"}";  
-    server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-    server.sendHeader("Pragma", "no-cache");
-    server.sendHeader("Expires", "-1");
-    server.send(200, "text/html", message); // Empty content inhibits Content-length header so we have to close the socket ourselves.
-  
-    server.client().stop(); // Stop is needed because we sent no content length
-    delay(100);
-  }
-}
 
 void handleactivateAPmode()
 {
@@ -238,10 +168,6 @@ void handleactivateAPmode()
 
 void handleNotFound() 
 {
-  if (captivePortal()) 
-  { // If caprive portal redirect instead of displaying the error page.
-    return;
-  }
   String message = "File Not Found\n\n";
   message += "URI: ";
   message += server.uri();
@@ -299,54 +225,6 @@ void handleESPStats()
   server.send(200, "text/html", message); // Empty content inhibits Content-length header so we have to close the socket ourselves.  
 }
 
-void handleStatus() 
-{
-  if(DEBUG)
-    Serial.println("get status call to me");
-  //String message = "000,050,100,150,200,250,300,350,400";
-  String message = getDataLine(); 
-  if(DEBUG)
-    Serial.println(message);
-  server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-  server.sendHeader("Pragma", "no-cache");
-  server.sendHeader("Expires", "-1");
-  server.send(200, "text/html", message); // Empty content inhibits Content-length header so we have to close the socket ourselves.
-
-}
-
-void handleResetAll()
-{
-  server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-  server.sendHeader("Pragma", "no-cache");
-  server.sendHeader("Expires", "-1");
-  server.setContentLength(CONTENT_LENGTH_UNKNOWN);
-  server.send(200, "text/html", ""); // Empty content inhibits Content-length header so we have to close the socket ourselves.
-  server.sendContent(
-    "<html><head></head><body>"
-    "<h1>Resetting everything!!</h1></body></html>"
-  );
-  server.client().stop(); // Stop is needed because we sent no content length
-  factory_reset();
-}
-
-void handleresetVar()
-{
-  if(DEBUG)  
-    Serial.print("Reseting variable with identity\t");
-  String id = server.arg("identity");
-  String resetString = "$$" + id + "$$";
-
-  int intid = id.toInt();
-  if(DEBUG)  
-    Serial.println(id);
-  String message = "Reset the Variable";
-  server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-  server.sendHeader("Pragma", "no-cache");
-  server.sendHeader("Expires", "-1");
-  server.send(200, "text/html", message); // Empty content inhibits Content-length header so we have to close the socket ourselves.
-  if(DEBUG)
-    Serial.println(resetString);
-}
 
 void handleactivateFan()
 {
@@ -437,6 +315,8 @@ void handleactivateLed()
   if(resp)
     digitalWrite(Led, val);  
 }
+
+
 void handleactivateLight()
 {
   int resp=0;

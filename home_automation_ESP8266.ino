@@ -1,11 +1,6 @@
-#include <Arduino.h>
 #include <ESP8266WiFi.h>
 #include <WiFiClient.h> 
 #include <ESP8266WebServer.h>
-#include <ESP8266HTTPClient.h>
-#include <ESP8266WiFiMulti.h>
-#include <ESP8266HTTPUpdateServer.h>
-#include <DNSServer.h>
 #include <ESP8266mDNS.h>
 #include <EEPROM.h>
 
@@ -32,15 +27,8 @@ const char *myHostname = "smarthome";
 char ssid[32] = "";
 char password[32] = "";
 
-// DNS server
-const byte DNS_PORT = 53;
-DNSServer dnsServer;
-
 // Web server
 ESP8266WebServer server(80);
-ESP8266HTTPUpdateServer httpUpdater;
-
-ESP8266WiFiMulti WiFiMulti;
 
 /* Soft AP network parameters */
 IPAddress apIP(192, 168, 4, 1);
@@ -57,7 +45,6 @@ int GateLock=D5;
 int Light=D6;
 int Led=D7;
 
-
 //--------------------------------------------------------------------------------------------------
 void setup() 
 {
@@ -71,6 +58,8 @@ void setup()
 
   // initiallise peripherals
   Serial.begin(115200);
+  EEPROM.begin(512);
+  Serial.setDebugOutput(true);
   activateAPmode();
   init_gpio();
   setupEndPoints();
@@ -84,32 +73,42 @@ void setup()
   {
     Serial.println("NO Wifi Credentials are present");
     credentialsPresent = false;
+    WiFi.disconnect(true);
   }
 }
 
 
 void loop() 
 {
+  // putting it first so that if the code may return from anywhere below this is executed always.
+   server.handleClient();
+ 
   // Wifi retries always interferes with softAP operation.!!!!
-  if(credentialsPresent)
+  int state = WiFi.status();
+  if(credentialsPresent && strlen(ssid) > 0 && state != WL_CONNECTED)
   {
     if( isSSIDPresent() )
     {
-      if(WiFi.status() != WL_CONNECTED)
+      if(DEBUG)
+        Serial.println("SSID present");
+      int res = connectWifi();
+      if(res == WL_CONNECT_FAILED)
       {
-        int res = connectWifi();    
-        if (res == WL_CONNECTED) 
+        Serial.println("possibly Wrong Password! Trying Again") ; 
+        delay(10000);
+        return;
+      }
+      if (res == WL_CONNECTED) 
+      {
+        if(DEBUG)
         {
-          if(DEBUG)
-          {
-            Serial.println ( "" );
-            Serial.print ( "Connected to " );
-            Serial.println ( ssid );
-            Serial.print ( "IP address: " );
-            Serial.println ( WiFi.localIP() );
-          }        
-          setupMDNS();
-        }  // if WL_connected 
+          Serial.println ( "" );
+          Serial.print ( "Connected to " );
+          Serial.println ( ssid );
+          Serial.print ( "IP address: " );
+          Serial.println ( WiFi.localIP() );
+        }        
+        setupMDNS();
       }// if not connected to wifi already
     }// check if ssid is present
     else
@@ -118,15 +117,13 @@ void loop()
         Serial.println("No Such SSID present YET!");
     }
   } // if credentialsPresent
-  server.handleClient();
 } // LOOP ends
 
 //---------------------------------------------------------------------------------------------------
-void connectWifi() 
+int connectWifi() 
 {
   WiFi.begin ( ssid, password );
-  WiFi.waitForConnectResult();
-  s = WiFi.status();
+  int s = WiFi.waitForConnectResult();
   return s;
 }
 
@@ -136,7 +133,7 @@ void activateAPmode()
   WiFi.softAPConfig(apIP, apIP, netMsk);
   WiFi.softAP(softAP_ssid, softAP_password);
 
-  delay(500); // Without delay I've seen the IP address blank
+  delay(1000); // Without delay I've seen the IP address blank
   if(DEBUG)
   {
     Serial.println();
@@ -174,7 +171,7 @@ bool isSSIDPresent()
   }
   else
   {
-    if(debug)
+    if(DEBUG)
     {
       Serial.print(n);
       Serial.println(" networks found");
@@ -195,8 +192,13 @@ bool isSSIDPresent()
       if(String(WiFi.SSID(i)) == String(ssid))
       {
         Serial.println("Desired SSID found!!  Connecting to it with given password");
+        found = true;
         break;
       } // if Wifi ssid matches 
+    } // for loop ends
+  }// else ends here 
+  if(DEBUG)
+    Serial.println("exiting SSID present");
   return found;
 }
 
@@ -208,7 +210,6 @@ void setupEndPoints()
   server.on("/wifisave", handleWifiSave);
   server.on("/activateAPmode", handleactivateAPmode);
   server.on("/resetCredentials",handleResetCreds);
-  server.on("/resetAll",handleResetAll);  
   server.on("/getESPstats",handleESPStats);
   server.on("/connectWiFi",handleconnectWiFi);
   
