@@ -18,7 +18,7 @@
 
 /* Set these to your desired softAP credentials. They are not configurable at runtime */
 const char *softAP_ssid = "SmartHome";
-const char *softAP_password = "beyond@9910118292";
+const char *softAP_password = "*******";
 
 /* hostname for mDNS. Should work at least on windows. Try http://esp8266.local */
 const char *myHostname = "smarthome";
